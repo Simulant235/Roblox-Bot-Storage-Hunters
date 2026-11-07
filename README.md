@@ -7,7 +7,7 @@ It only **looks at your screen and clicks** (like you would). It does not touch 
 ![Main window (light)](docs/main-light.png)
 
 > ## ⚠️ Read this first
-> - **Use at your own risk.** Automating clicks may be against the rules of the game or of Roblox. Check the game's rules / Discord before you use it. If automation is not allowed, don't use it.
+> - **Use at your own risk.**
 > - This project is a hobby tool. It is **not affiliated with Roblox or the game's developers.**
 > - It was built and tested on one setup (Windows 11, 1 or 2 monitors). Things can differ on yours — see [Troubleshooting](#troubleshooting).
 
