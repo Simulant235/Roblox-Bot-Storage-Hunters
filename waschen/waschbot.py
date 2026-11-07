@@ -36,7 +36,7 @@ from PIL import Image, ImageGrab
 # ---------------------------------------------------------------- Einstellungen
 NAME = "Waschgeschäft"
 LANGUAGE = "de"         # Sprache der Meldungen (wird von der Oberfläche / --sprache gesetzt)
-SLOTS = 2               # Anzahl freigeschalteter Plätze (Platz 3 ist gesperrt -> 2)
+SLOTS = 3               # Anzahl Plätze im Spiel; welche genutzt werden, bestimmt Bot.active (Schloss in der Oberfläche)
 INTERVAL = 1.0          # Sekunden: Prüfen, Warten nach Klicks, Item-Liste, alles
 STATUS_INTERVAL = 30    # Sekunden: nur die Anzeige P1/P2/P3 (Fortschritt + Restzeit)
 TIMER_KORREKTUR = -1    # Sekunden: gelesene Restzeit anpassen, damit sie genau mit Roblox übereinstimmt
@@ -637,9 +637,11 @@ def fmt_secs(s):
 
 class Bot:
     def __init__(self, cal, test=False, on_log=None, on_slots=None, anti_afk=False, background=False,
-                 notify_end=True, notify_item=False, on_notify=None):
+                 notify_end=True, notify_item=False, on_notify=None, active_slots=None):
         self.lay = Layout(cal)
         self.cal = cal
+        # Plätze, die der Bot benutzt (0-basiert). Gesperrte Plätze (Schloss) werden komplett ignoriert.
+        self.active = sorted(active_slots) if active_slots is not None else [0]
         self.test = test
         self.on_log = on_log
         self.on_slots = on_slots          # bekommt alle STATUS_INTERVAL Sekunden die Platz-Infos
@@ -803,7 +805,7 @@ class Bot:
 
     def pending_slots(self, img):
         """Plätze, die noch etwas zu tun haben: belegt (läuft) oder fertig (SAMMELN sichtbar)."""
-        return [i + 1 for i in range(SLOTS) if self.lay.collect_button(img, i) or not self.lay.slot_empty(img, i)]
+        return [i + 1 for i in self.active if self.lay.collect_button(img, i) or not self.lay.slot_empty(img, i)]
 
     def pick_first_item(self, slot=None):
         """Liste ist offen: erstes Item wählen und warten, bis sie zugeht. Geht sie nicht zu -> keine Items mehr."""
@@ -875,7 +877,7 @@ class Bot:
     def refresh_timers(self, img):
         """Läuft ein Platz ohne bekannte Zeit (Timer war noch nicht lesbar), alle 5 s erneut versuchen."""
         now = time.time()
-        for i in range(SLOTS):
+        for i in self.active:
             if i in self.ends or now - self.timer_try.get(i, 0) < 5:
                 continue
             self.timer_try[i] = now
@@ -959,7 +961,7 @@ class Bot:
             press_key(scan)
 
     def report_status(self, img):
-        infos = [self.slot_info(img, i) for i in range(SLOTS)]
+        infos = [self.slot_info(img, i) for i in self.active]
         self.last_status_time = time.time()
         if self.on_slots:
             self.on_slots(infos)
@@ -1009,7 +1011,7 @@ class Bot:
             return
 
         # 3) Plätze abarbeiten
-        for i in range(SLOTS):
+        for i in self.active:
             btn = lay.collect_button(img, i)
             if btn:
                 self.act(*btn, T("a_at_slot", what=T("a_collect"), n=i + 1))

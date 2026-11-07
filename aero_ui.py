@@ -213,6 +213,34 @@ def seg_images(w, h, n, silver, aqua):
     return base, pad, segs
 
 
+def lock_icon(d, locked, ss=4):
+    """Vorhängeschloss: geschlossen = grau-blau (Platz gesperrt), offen = grün (Platz wird genutzt)."""
+    D = d * ss
+    body = (84, 100, 124, 255) if locked else (32, 150, 66, 255)
+    dark = tuple(int(c * 0.62) for c in body[:3]) + (255,)
+    img = Image.new("RGBA", (D, D), (0, 0, 0, 0))
+    g = ImageDraw.Draw(img)
+    bw, bh = D * 0.66, D * 0.46
+    bx0, by0 = (D - bw) / 2, D * 0.47
+    stroke = max(int(D * 0.1), 2)
+    sx0, sx1 = bx0 + bw * 0.2, bx0 + bw * 0.8
+    top = D * (0.08 if locked else 0.02)
+    arc_h = (sx1 - sx0)
+    g.arc([sx0, top, sx1, top + arc_h], 180, 360, fill=dark, width=stroke)
+    mid = top + arc_h / 2
+    g.line([(sx0 + stroke / 2, mid), (sx0 + stroke / 2, by0 + D * 0.06)], fill=dark, width=stroke)
+    g.line([(sx1 - stroke / 2, mid), (sx1 - stroke / 2, by0 + D * 0.06 if locked else by0 - D * 0.1)], fill=dark, width=stroke)
+    g.rounded_rectangle([bx0, by0, bx0 + bw, by0 + bh], D * 0.1, fill=body, outline=dark, width=max(D // 40, 1))
+    g.rounded_rectangle([bx0 + D * 0.03, by0 + D * 0.03, bx0 + bw - D * 0.03, by0 + bh * 0.45], D * 0.07,
+                        fill=(255, 255, 255, 55))
+    cx, cy = D / 2, by0 + bh * 0.46
+    r = D * 0.055
+    g.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(255, 255, 255, 240))
+    g.polygon([(cx - r * 0.55, cy), (cx + r * 0.55, cy), (cx + r * 0.4, cy + bh * 0.28), (cx - r * 0.4, cy + bh * 0.28)],
+              fill=(255, 255, 255, 240))
+    return img.resize((d, d), Image.LANCZOS)
+
+
 def orb(d, color, ss=4):
     """Glänzende Kugel (Status-Licht / Häkchen)."""
     D = d * ss
@@ -320,6 +348,16 @@ class Controller:
         self.notify_end = True     # Windows-Benachrichtigung, wenn keine Items mehr da sind und der Bot stoppt
         self.notify_item = False   # Windows-Benachrichtigung bei jedem fertigen Item (muss man selbst einschalten)
         self.t = lambda key, **kw: SP.tr("de", key, **kw)   # wird von der Oberfläche auf die gewählte Sprache gesetzt
+        # Plätze, die der Bot benutzt (Platz 1 immer). Gesperrte Plätze (Schloss) ignoriert er. Standard: nur Platz 1, der Rest wird selbst freigegeben.
+        saved = load_settings().get("unlocked") or {}
+        default = {"waschen": [1], "werten": [1]}
+        self.unlocked = {}
+        for m, d in default.items():
+            nums = saved.get(m, d) if isinstance(saved.get(m, d), list) else d
+            self.unlocked[m] = sorted({1} | {n for n in nums if n in (2, 3)})
+
+    def active_slots(self):
+        return [n - 1 for n in sorted(self.unlocked[self.mode])]
 
     @property
     def mod(self):
@@ -350,7 +388,7 @@ class Controller:
             self.bot = m.Bot(cal, test=test, on_log=lambda l, k="": self.q.put(("log", (l, k))),
                              on_slots=lambda s: self.q.put(("slots", s)), anti_afk=self.anti_afk,
                              background=self.background, notify_end=self.notify_end, notify_item=self.notify_item,
-                             on_notify=self.on_notify)
+                             on_notify=self.on_notify, active_slots=self.active_slots())
             self.q.put(("state", "run"))
             self.bot.run()
         except m.StopBot:
@@ -496,6 +534,7 @@ class AeroUI:
                 self.paint_monitor(mon)
         self.paint_retry()
         self.paint_seg(self.theme_seg, self.theme)
+        self.paint_locks()
         self.cv.itemconfig(self.afk_orb, image=self.orbs["green" if self.ctl.anti_afk else "grey"])
         self.cv.itemconfig(self.bg_orb, image=self.orbs["green" if self.ctl.background else "grey"])
         self.cv.itemconfig(self.ne_orb, image=self.orbs["green" if self.ctl.notify_end else "grey"])
@@ -766,6 +805,12 @@ class AeroUI:
         silver = self.th["silver"]
         self.lang_btn = self.button(812, 260, 132, 24, dict(SP.LANGS)[self.lang], silver, self.open_lang_menu, True, 9)
         self.cards = []
+        d = self.s(28)
+        self.lock_photos = {True: self.photo(lock_icon(d, True)), False: self.photo(lock_icon(d, False))}
+        self.lock_big_photo = self.photo(lock_icon(self.s(64), True))
+        veil = (6, 12, 30, 150) if THEME == "dark" else (208, 216, 228, 150)
+        self.veil_photo = self.photo(masked(Image.new("RGBA", (self.s(290), self.s(168)), veil),
+                                            rr_mask(self.s(290), self.s(168), self.s(14))))
         tw, th = 250, 18
         track = masked(grad(self.s(tw), self.s(th), *self.th["track"]),
                        rr_mask(self.s(tw), self.s(th), self.s(th / 2)))
@@ -776,13 +821,23 @@ class AeroUI:
             c = {"x": x}
             c["title"] = self.ltext(x + 20, 306, "slot", 15, "bold", "#0d3b66", "#ffffff",
                                     fn=lambda n=k + 1: self.t("slot", n=n))
-            c["state"] = self.text(x + 270, 310, "—", 10, "bold", "#2a5a85", anchor="ne")
+            c["state"] = self.text(x + (270 if k == 0 else 232), 310, "—", 10, "bold", "#2a5a85", anchor="ne")
             self.cv.create_image(self.s(x + 20), self.s(352), image=self.track_photo, anchor="nw")
             c["fill"] = self.cv.create_image(self.s(x + 20), self.s(352), anchor="nw")
             c["fill_photo"] = None
             c["pct"] = self.text(x + 145, 361, "", 9, "bold", "#0d3b66", anchor="center")
             c["remain"] = self.text(x + 20, 384, "", 12, "bold", "#0d3b66")
             c["eta"] = self.text(x + 20, 410, "", 10, "normal", "#2a5a85")
+            if k >= 1:                        # Platz 2 und 3 haben ein Schloss (Platz 1 nicht)
+                tag = f"lock{k}"
+                c["veil"] = self.cv.create_image(self.s(x), self.s(292), image=self.veil_photo, anchor="nw")
+                c["lock_big"] = self.cv.create_image(self.s(x + 145), self.s(382), image=self.lock_big_photo, tags=tag)
+                c["lock"] = self.cv.create_image(self.s(x + 256), self.s(317), image=self.lock_photos[True], tags=tag)
+                self.cv.tag_bind(tag, "<Button-1>", lambda e, n=k + 1: self.toggle_lock(n))
+                self.cv.tag_bind(tag, "<Enter>", lambda e: (self.cv.config(cursor="hand2"),
+                                                            self.set_text(self.slots_info, self.t("lock_tip"))))
+                self.cv.tag_bind(tag, "<Leave>", lambda e: (self.cv.config(cursor=""),
+                                                            self.set_text(self.slots_info, self.slots_info_text or self.t("live"))))
             self.cards.append(c)
         # Kalibrier-Banner (über den Karten)
         ban, pad = glass(self.s(900), self.s(150), self.s(16), 2.2)
@@ -877,9 +932,9 @@ class AeroUI:
         names = {"leer": self.t("st_empty"), "läuft": self.t("st_running"), "fertig": self.t("st_done")}
         for k, c in enumerate(self.cards):
             s = by_slot.get(k + 1)
-            if k >= bot.SLOTS:
-                self.set_text(c["state"], self.t("unused"), "#8aa0b5")
-                self.set_text(c["remain"], self.t("locked"), "#8aa0b5")
+            if (k + 1) not in self.ctl.unlocked[self.ctl.mode]:      # gesperrt (Schloss): wird ignoriert
+                self.set_text(c["state"], self.t("locked"), "#8aa0b5")
+                self.set_text(c["remain"], "")
                 self.set_text(c["eta"], "")
                 self.set_text(c["pct"], "")
                 self.cv.itemconfig(c["fill"], image="")
@@ -939,6 +994,7 @@ class AeroUI:
             return
         self.ctl.mode = mode
         self.paint_mode()
+        self.paint_locks()
         self.update_slots(None)
 
     def paint_mode(self):
@@ -950,6 +1006,44 @@ class AeroUI:
             if b["text"][1]:
                 self.cv.itemconfig(b["text"][1], fill=self.col_sh(sh))
         self.set_slots_title()
+
+    def paint_locks(self):
+        un = self.ctl.unlocked[self.ctl.mode]
+        for k, c in enumerate(self.cards):
+            if "lock" not in c:
+                continue
+            locked = (k + 1) not in un
+            self.cv.itemconfig(c["lock"], image=self.lock_photos[locked])
+            vis = "normal" if locked else "hidden"
+            self.cv.itemconfig(c["veil"], state=vis)
+            self.cv.itemconfig(c["lock_big"], state=vis)
+            self.cv.tag_raise(c["lock_big"], c["veil"])
+            self.cv.tag_raise(c["lock"], c["lock_big"])
+
+    def toggle_lock(self, n):
+        """Schloss von Platz n umschalten - nur wenn der Bot pausiert/gestoppt ist und der Platz nicht benutzt wird."""
+        ctl = self.ctl
+        if ctl.busy() and not (ctl.bot and ctl.bot.paused):
+            self.append_log(self.t("m_lock_busy"), "warn")
+            return
+        used = {d["slot"]: d for d in self.slot_data or []}.get(n)
+        if used and used["state"] in ("läuft", "fertig"):
+            self.append_log(self.t("m_lock_used", n=n), "warn")
+            return
+        cur = ctl.unlocked[ctl.mode]
+        if n in cur:
+            cur.remove(n)
+            msg = "m_lock_on"
+        else:
+            cur.append(n)
+            cur.sort()
+            msg = "m_lock_off"
+        save_setting("unlocked", ctl.unlocked)
+        if ctl.bot:
+            ctl.bot.active = ctl.active_slots()
+        self.paint_locks()
+        self.update_slots(self.slot_data)
+        self.append_log(self.t(msg, n=n))
 
     def set_slots_title(self):
         shop = self.t("shop_wash" if self.ctl.mode == "waschen" else "shop_grade")

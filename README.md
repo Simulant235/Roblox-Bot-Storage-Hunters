@@ -20,7 +20,7 @@ It only **looks at your screen and clicks** (like you would). It does not touch 
 | Fills empty slots | ✔ first suitable item | ✔ first item that is **not `[Broken]`** |
 | Waits for the timer | ✔ reads it once, then counts down live | ✔ same |
 | When a slot is ready | clicks **COLLECT**, then **CLAIM** | clicks **REVEAL**, skips the animation, clicks **CLAIM** |
-| Slots used | 2 (slot 3 is locked) | 3 |
+| Slots used | only slot 1 by default — [open the padlocks](#slot-locks) of the slots you have | same |
 
 Extra features
 - Finds the item cards **automatically** (4, 3, 2 or 1 per row) — you don't calibrate item positions.
@@ -100,6 +100,21 @@ The bot now runs by itself. Keep Roblox visible (not covered by other windows).
 
 **Emergency stop:** press **F10**, or move the mouse to the **top-left corner** of the screen.
 
+### Slot locks
+
+Slot 2 and slot 3 have a small **padlock** in the top-right corner of their card (slot 1 doesn't — it is always used).
+
+| Icon | Meaning |
+|---|---|
+| <img src="docs/lock-closed.svg" width="28"> **closed, card greyed out** | the bot **ignores** this slot (it never clicks it, never waits for it) |
+| <img src="docs/lock-open.svg" width="28"> **open** | the bot **uses** this slot |
+
+- **Set it up for your own account:** how many slots you have differs from player to player. Open or close the padlocks so they match **exactly the slots you have unlocked in the game** — one, two or all three. The bot only uses the open ones.
+- **Default:** in both modes **only slot 1 is open**, slots 2 and 3 are locked. Open the padlocks of the slots you have unlocked in the game. (The screenshots above show slot 2 opened as an example.)
+- **Change it** by clicking the padlock. This only works when **the bot is paused or stopped** *and* **that slot isn't in use** (no running timer, nothing waiting to be collected). Otherwise the log tells you why.
+- Your choice is saved **per mode**.
+- The bot does **not** unlock slots in the game (that may cost real money). Only open the padlock for slots that are really **unlocked in the game** — otherwise the bot waits for a slot that never works.
+
 ---
 
 ## What the bot does (simplified)
@@ -164,6 +179,15 @@ The timer is read with the **text recognition built into Windows**. Make sure Wi
 
 ### Good items are skipped / `[Broken]` items are taken
 Set the bot's **language** (button at the top right of the slots panel) to **the same language as Roblox**. Unreadable tags are treated as `[Broken]` on purpose (the bot skips them).
+
+### I unlocked slot 3 in the game but the bot doesn't use it
+Open the padlock on the slot-3 card (see [Slot locks](#slot-locks)). Pause or stop the bot first.
+
+### The padlock doesn't react
+The log says why: either the bot is running (press **Pause** or **Stop** first) or the slot is still in use (wait until its item is finished and collected).
+
+### The bot waits forever for a slot
+You opened the padlock of a slot that is **not** unlocked in the game. Pause the bot and close that padlock again.
 
 ### The bot clicks something else than the item (e.g. the bottom bar)
 Calibrate again, especially steps **4 and 5**. The item cards are found automatically, so this usually means the list title / X point is off.

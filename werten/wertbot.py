@@ -37,7 +37,7 @@ from PIL import Image, ImageGrab
 
 # ---------------------------------------------------------------- Einstellungen
 NAME = "Bewertungs-Shop"
-SLOTS = 3               # Anzahl freigeschalteter Plätze (gesperrte werden ohnehin nie angeklickt)
+SLOTS = 3               # Anzahl Plätze im Spiel; welche genutzt werden, bestimmt Bot.active (Schloss in der Oberfläche)
 INTERVAL = 1.0          # Sekunden: Prüfen, Warten nach Klicks, Animation-Skip, Item-Liste, alles
 STATUS_INTERVAL = 30    # Sekunden: nur die Anzeige P1/P2/P3 (Fortschritt + Restzeit)
 TIMER_KORREKTUR = -1    # Sekunden: gelesene Restzeit anpassen, damit sie genau mit Roblox übereinstimmt
@@ -832,9 +832,11 @@ def fmt_secs(s):
 
 class Bot:
     def __init__(self, cal, test=False, on_log=None, on_slots=None, anti_afk=False, background=False,
-                 notify_end=True, notify_item=False, on_notify=None):
+                 notify_end=True, notify_item=False, on_notify=None, active_slots=None):
         self.lay = Layout(cal)
         self.cal = cal
+        # Plätze, die der Bot benutzt (0-basiert). Gesperrte Plätze (Schloss) werden komplett ignoriert.
+        self.active = sorted(active_slots) if active_slots is not None else [0]
         self.test = test
         self.on_log = on_log
         self.on_slots = on_slots          # bekommt alle STATUS_INTERVAL Sekunden die Platz-Infos
@@ -1087,7 +1089,7 @@ class Bot:
 
     def pending_slots(self, img):
         """Plätze, die noch etwas zu tun haben: belegt (läuft) oder fertig (OFFENBAREN / BEANSPRUCHEN sichtbar)."""
-        return [i + 1 for i in range(SLOTS) if self.lay.green_button(img, i) or not self.lay.slot_empty(img, i)]
+        return [i + 1 for i in self.active if self.lay.green_button(img, i) or not self.lay.slot_empty(img, i)]
 
     def pick_first_item(self, slot=None):
         """Liste ist offen: erstes Item wählen, das nicht [Broken] ist, und warten, bis sie zugeht."""
@@ -1164,7 +1166,7 @@ class Bot:
     def refresh_timers(self, img):
         """Läuft ein Platz ohne bekannte Zeit (Timer war noch nicht lesbar), alle 5 s erneut versuchen."""
         now = time.time()
-        for i in range(SLOTS):
+        for i in self.active:
             if i in self.ends or now - self.timer_try.get(i, 0) < 5:
                 continue
             self.timer_try[i] = now
@@ -1265,7 +1267,7 @@ class Bot:
             press_key(scan)
 
     def report_status(self, img):
-        infos = [self.slot_info(img, i) for i in range(SLOTS)]
+        infos = [self.slot_info(img, i) for i in self.active]
         self.last_status_time = time.time()
         if self.on_slots:
             self.on_slots(infos)
@@ -1301,7 +1303,7 @@ class Bot:
                 self.log(T("b_not_open", shop=shop()))
             return
 
-        for i in range(SLOTS):
+        for i in self.active:
             btn = lay.green_button(img, i)
             if btn:
                 if lay.reroll_visible(img, i):
