@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+bot.log
+einstellungen.json
+kalibrierung.json
+kalibrierungen/
